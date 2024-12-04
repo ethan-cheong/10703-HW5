@@ -125,15 +125,23 @@ def expand_root(node, actions, network, current_state):
 
     Return: the value of the root
     """
-    # get hidden state representation
+    # Get hidden state representation
+    transformed_value, reward, policy_logits, hidden_representation = \
+        network.initial_inference(current_state)
 
     # Extract softmax policy and set node.policy
+    assert policy_logits.ndim == 1 # Fix this if not the case
+    softmax_policy = np.exp(policy_logits) / sum(np.exp(policy_logits))
+    node.prior = softmax_policy # set root node's policy to match action selection distribution
+    node.hidden_representation = hidden_representation
+    node.reward = reward
 
     # instantiate node's children with prior values, obtained from the predicted policy
+    # We need one child for each action
+    node.children = {action: Node(softmax_policy) for action in actions}
+    node.expanded = True
 
-    # set node as expanded
-    raise NotImplementedError()
-    return value
+    return transformed_value
 
 
 def expand_node(node, actions, network, parent_state, parent_action):
