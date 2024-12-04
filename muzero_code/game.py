@@ -41,15 +41,22 @@ class Game:
         2. Stores the normalized root node child visits, this is the POLICY target
         """
         sum_visits = sum(child.visit_count for child in root.children.values())
-        self.child_visits.append(np.array([
-            root.children[a].visit_count
-            / sum_visits if a in root.children else 0
-            for a in range(self.action_space_size)
-        ]))
+        self.child_visits.append(
+            np.array(
+                [
+                    (
+                        root.children[a].visit_count / sum_visits
+                        if a in root.children
+                        else 0
+                    )
+                    for a in range(self.action_space_size)
+                ]
+            )
+        )
         self.root_values.append(root.value())
 
     def action(self, action, env):
-        obs, reward, done, _ = env.step(action)
+        obs, reward, done, _, _ = env.step(action)
         # Only for walker environment
         # obs, reward, done, _ = env.step(CONVERTER[action])
         self.curr_state = obs
@@ -86,23 +93,29 @@ class Game:
             else:
                 value = 0
 
-            for i, reward in enumerate(self.reward_history[current_index:bootstrap_index]):
+            for i, reward in enumerate(
+                self.reward_history[current_index:bootstrap_index]
+            ):
                 value += reward * (self.discount**i)
 
             if current_index > 0 and current_index <= len(self.reward_history):
-                last_reward = self.reward_history[current_index-1]
+                last_reward = self.reward_history[current_index - 1]
             else:
                 last_reward = 0
 
             if current_index < len(self.root_values):
-                targets.append((value, last_reward,
-                                self.child_visits[current_index]))
+                targets.append((value, last_reward, self.child_visits[current_index]))
                 actions.append(self.action_history[current_index])
             else:
                 assert 0 == 1
                 # States past the end of games are treated as absorbing states.
                 num_actions = self.action_space_size
                 targets.append(
-                    (0, last_reward, np.array([1.0 / num_actions for _ in range(num_actions)])))
+                    (
+                        0,
+                        last_reward,
+                        np.array([1.0 / num_actions for _ in range(num_actions)]),
+                    )
+                )
                 actions.append(np.random.choice(num_actions))
         return targets, actions

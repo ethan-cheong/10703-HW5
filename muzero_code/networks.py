@@ -10,11 +10,20 @@ from typing import Callable
 from networks_base import BaseNetwork
 
 
+def patch_asscalar(a):
+    return a.item()
+
+
+setattr(np, "asscalar", patch_asscalar)
+
+
 def action_to_one_hot(action, action_space_size):
     """
     Compute one hot of action to be combined with state representation
     """
-    return np.array([1 if i == action else 0 for i in range(action_space_size)]).reshape(1, -1)
+    return np.array(
+        [1 if i == action else 0 for i in range(action_space_size)]
+    ).reshape(1, -1)
 
 
 class CartPoleNetwork(BaseNetwork):
@@ -40,29 +49,76 @@ class CartPoleNetwork(BaseNetwork):
 
         # Create Networks, we use tanh activation as a normalizer on the state
         # Standard muzero performs max-min normalization
-        representation_network = Sequential([Dense(self.hidden_neurons, activation='relu', kernel_regularizer=regularizer),
-                                             Dense(self.embedding_size, activation='tanh',
-                                                   kernel_regularizer=regularizer)])
+        representation_network = Sequential(
+            [
+                Dense(
+                    self.hidden_neurons,
+                    activation="relu",
+                    kernel_regularizer=regularizer,
+                ),
+                Dense(
+                    self.embedding_size,
+                    activation="tanh",
+                    kernel_regularizer=regularizer,
+                ),
+            ]
+        )
         # Change to full support if negative values allowed
         # map internal state into values
-        value_network = Sequential([Dense(self.hidden_neurons, activation='relu', kernel_regularizer=regularizer),
-                                    Dense(self.value_support_size, kernel_regularizer=regularizer)])
+        value_network = Sequential(
+            [
+                Dense(
+                    self.hidden_neurons,
+                    activation="relu",
+                    kernel_regularizer=regularizer,
+                ),
+                Dense(self.value_support_size, kernel_regularizer=regularizer),
+            ]
+        )
 
         # map internal state into policy vector. (use softmax on the output to get action distribution.)
-        policy_network = Sequential([Dense(self.hidden_neurons, activation='relu', kernel_regularizer=regularizer),
-                                     Dense(action_size, kernel_regularizer=regularizer)])
+        policy_network = Sequential(
+            [
+                Dense(
+                    self.hidden_neurons,
+                    activation="relu",
+                    kernel_regularizer=regularizer,
+                ),
+                Dense(action_size, kernel_regularizer=regularizer),
+            ]
+        )
 
         # The following two networks were modelled jointly in the paper
-        # map state and action to next state 
-        dynamic_network = Sequential([Dense(self.hidden_neurons, activation='relu', kernel_regularizer=regularizer),
-                                      Dense(self.embedding_size, activation='tanh',
-                                            kernel_regularizer=regularizer)])
+        # map state and action to next state
+        dynamic_network = Sequential(
+            [
+                Dense(
+                    self.hidden_neurons,
+                    activation="relu",
+                    kernel_regularizer=regularizer,
+                ),
+                Dense(
+                    self.embedding_size,
+                    activation="tanh",
+                    kernel_regularizer=regularizer,
+                ),
+            ]
+        )
         # map state and action to reward
-        reward_network = Sequential([Dense(16, activation='relu', kernel_regularizer=regularizer),
-                                     Dense(1, kernel_regularizer=regularizer)])
+        reward_network = Sequential(
+            [
+                Dense(16, activation="relu", kernel_regularizer=regularizer),
+                Dense(1, kernel_regularizer=regularizer),
+            ]
+        )
 
-        super().__init__(representation_network, value_network,
-                         policy_network, dynamic_network, reward_network)
+        super().__init__(
+            representation_network,
+            value_network,
+            policy_network,
+            dynamic_network,
+            reward_network,
+        )
 
     def training_steps(self):
         return self.train_steps
@@ -72,19 +128,22 @@ class CartPoleNetwork(BaseNetwork):
         # Change to -value_support_size -> value_support_size for full support
         value = np.dot(value, range(self.value_support_size))
         value = tf.math.sign(value) * (
-                ((tf.math.sqrt(1 + 4 * 0.001
-                 * (tf.math.abs(value) + 1 + 0.001)) - 1) / (2 * 0.001)) ** 2 - 1
+            (
+                (tf.math.sqrt(1 + 4 * 0.001 * (tf.math.abs(value) + 1 + 0.001)) - 1)
+                / (2 * 0.001)
+            )
+            ** 2
+            - 1
         )
         return value.numpy()[0]
 
     def _scalar_to_support(self, target_value):
         batch = len(target_value)
         targets = np.zeros((batch, self.value_support_size))
-        target_value = tf.math.sign(target_value) * \
-            (tf.math.sqrt(tf.math.abs(target_value) + 1)
-             - 1 + 0.001*target_value)
-        target_value = tf.clip_by_value(
-            target_value, 0, self.value_support_size)
+        target_value = tf.math.sign(target_value) * (
+            tf.math.sqrt(tf.math.abs(target_value) + 1) - 1 + 0.001 * target_value
+        )
+        target_value = tf.clip_by_value(target_value, 0, self.value_support_size)
         floor = tf.math.floor(target_value)
         rest = target_value - floor
         targets[range(batch), tf.cast(floor, tf.int32)] = 1 - rest
@@ -102,12 +161,15 @@ class CartPoleNetwork(BaseNetwork):
         """
         return np.asscalar(reward.numpy()[0])
 
-    def _conditioned_hidden_state(self, hidden_state: np.array, action: int) -> np.array:
+    def _conditioned_hidden_state(
+        self, hidden_state: np.array, action: int
+    ) -> np.array:
         """
         concatenate the hidden state and action for input to recurrent model
         """
         conditioned_hidden = tf.concat(
-            (hidden_state, action_to_one_hot(action, self.action_size)), axis=1)
+            (hidden_state, action_to_one_hot(action, self.action_size)), axis=1
+        )
         return conditioned_hidden
 
     def _softmax(self, values):
@@ -125,11 +187,18 @@ class CartPoleNetwork(BaseNetwork):
         """
 
         def get_variables():
-            networks = (self.representation_network, self.value_network, self.policy_network,
-                        self.dynamic_network, self.reward_network)
-            return [variables
-                    for variables_list in map(lambda n: n.trainable_weights, networks)
-                    for variables in variables_list]
+            networks = (
+                self.representation_network,
+                self.value_network,
+                self.policy_network,
+                self.dynamic_network,
+                self.reward_network,
+            )
+            return [
+                variables
+                for variables_list in map(lambda n: n.trainable_weights, networks)
+                for variables in variables_list
+            ]
 
         return get_variables
 
@@ -139,15 +208,14 @@ class CartPoleNetwork(BaseNetwork):
             os.mkdir(path)
 
         self.representation_network.save_weights(
-            path + "/representation_net")  # , save_format='h5py')
-        self.value_network.save_weights(
-            path + "/value_net")  # , save_format='h5py')
-        self.policy_network.save_weights(
-            path + "/policy_net")  # , save_format='h5py')
+            path + "/representation_net"
+        )  # , save_format='h5py')
+        self.value_network.save_weights(path + "/value_net")  # , save_format='h5py')
+        self.policy_network.save_weights(path + "/policy_net")  # , save_format='h5py')
         self.dynamic_network.save_weights(
-            path + "/dynamic_net")  # , save_format='h5py')
-        self.reward_network.save_weights(
-            path + "/reward_net")  # , save_format='h5py')
+            path + "/dynamic_net"
+        )  # , save_format='h5py')
+        self.reward_network.save_weights(path + "/reward_net")  # , save_format='h5py')
         print("saved network at path:", path)
 
     def load(self, path):
@@ -166,7 +234,7 @@ def scale_gradient(tensor, scale):
     """
     Function to scale gradient as described in MuZero Appendix
     """
-    return tensor*scale + tf.stop_gradient(tensor) * (1. - scale)
+    return tensor * scale + tf.stop_gradient(tensor) * (1.0 - scale)
 
 
 def train_network(config, network, replay_buffer, optimizer, train_results):
@@ -196,29 +264,32 @@ def update_weights(config, network, optimizer, batch, train_results):
     Loss Note: The policy outputs are the logits, same with the value categorical representation
     You should use tf.nn.softmax_cross_entropy_with_logits to compute the loss in these cases
     """
+
     # for every game in sample batch, unroll and update network_model weights
     def loss():
         loss = 0
         total_value_loss = 0
         total_reward_loss = 0
         total_policy_loss = 0
-        (state_batch, targets_init_batch, targets_recurrent_batch,
-         actions_batch) = batch
+        (state_batch, targets_init_batch, targets_recurrent_batch, actions_batch) = (
+            batch
+        )
 
         # YOUR CODE HERE: Perform initial embedding of state batch
 
-        target_value_batch, _, target_policy_batch = zip(
-            *targets_init_batch)
+        target_value_batch, _, target_policy_batch = zip(*targets_init_batch)
         # Use this to convert scalar value targets to categorical representation
         # This now matches output of initial_model, and can be used with cross entropy loss
         target_value_batch = network._scalar_to_support(
-            tf.convert_to_tensor(target_value_batch))
+            tf.convert_to_tensor(target_value_batch)
+        )
         # YOUR CODE HERE: Compute the loss of the first pass (no reward loss)
         # Remember to scale value loss!
 
         for actions_batch, targets_batch in zip(actions_batch, targets_recurrent_batch):
             target_value_batch, target_reward_batch, target_policy_batch = zip(
-                *targets_batch)
+                *targets_batch
+            )
             # YOUR CODE HERE:
             # Create conditioned_representation: concatenate representations with actions batch
             # Recurrent step from conditioned representation: recurrent + prediction networks
@@ -242,6 +313,7 @@ def update_weights(config, network, optimizer, batch, train_results):
         train_results.policy_losses.append(total_policy_loss)
         train_results.reward_losses.append(total_reward_loss)
         return loss
+
     optimizer.minimize(loss=loss, var_list=network.cb_get_variables())
     network.train_steps += 1
     raise NotImplementedError()
