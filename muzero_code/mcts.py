@@ -1,4 +1,5 @@
 import numpy as np
+from random import choices
 
 
 class Node(object):
@@ -246,6 +247,17 @@ def softmax_sample(visit_counts, temperature):
     If temperature == 0, choose argmax
     Else: Compute distribution over visit_counts and sample action as in writeup
     """
+    assert temperature >= 0
 
-    # YOUR CODE HERE
-    raise NotImplementedError()
+    if temperature == 0:
+        return max(visit_counts)[1] # tuple comparison uses the first element.
+    
+    visit_counts, actions = list(zip(*visit_counts)) # unzip
+
+    weighted_counts = [count ** (1 / temperature) for count in visit_counts]
+    probs = [weighted_count / sum(weighted_counts) for weighted_count in weighted_counts]
+
+    action = choices(actions, weights=probs, k=1)[0]
+    return action
+
+    # raise NotImplementedError()
