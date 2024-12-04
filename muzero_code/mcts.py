@@ -183,10 +183,35 @@ def backpropagate(path, value, discount, min_max_stats):
 
     Update the value with discount and reward of node
     """
+
+    # Idea:
+    # calculate G^k for each node
+    # G^l = v^l
+    # G^l-1 = r_{l} + gamma * v^l
+    # G^l-2 = r_{l-1} + gamma_{r_l} + gamma ^ 2 * v^l
+    # 
+    # G^k = sum (gamma * r) + gamma * v   (Equation 3)
+    # First component is g_a, second is g_b
+    g_a = 0
+    g_b = 0
+    last_node = True
+    prev_node = None
     for node in reversed(path):
-        # YOUR CODE HERE
+        # calculate G^k for each note
+        if last_node:
+            g_b = value
+        else:
+            g_a = (discount * g_a) + prev_node.reward
+            g_b = g_b * discount
+        prev_node = node
+
+        g = g_a + g_b
+
+        # Update statistics
+        node.value_sum = node.visit_count * node.value_sum + g
+        node.visit_count += 1
+
         min_max_stats.update(node.value())
-    raise NotImplementedError()
 
 
 def add_exploration_noise(config, node):
