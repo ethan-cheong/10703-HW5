@@ -1,5 +1,6 @@
 import numpy as np
 from random import choices
+import tensorflow as tf
 
 
 class Node(object):
@@ -49,10 +50,14 @@ def run_mcts(config, root, network, min_max_stats):
             search_path.append(node)
         parent = search_path[-2]
         action = history[-1]
-        value = expand_node(node, list(
-            range(config.action_space_size)), network, parent.hidden_representation, action)
-        backpropagate(search_path, value,
-                      config.discount, min_max_stats)
+        value = expand_node(
+            node,
+            list(range(config.action_space_size)),
+            network,
+            parent.hidden_representation,
+            action,
+        )
+        backpropagate(search_path, value, config.discount, min_max_stats)
 
 
 def select_action(config, num_moves, node, network, test=False):
@@ -74,7 +79,7 @@ def select_action(config, num_moves, node, network, test=False):
     return action
 
 
-def select_child(config, node:Node, min_max_stats):
+def select_child(config, node: Node, min_max_stats):
     """
     TODO: Implement this function
     Select a child in the MCTS
@@ -84,11 +89,12 @@ def select_child(config, node:Node, min_max_stats):
     if not node.children:
         raise Exception("select_child called on node with no children")
 
-    best_score = float("-inf") # this might cause bugs later...
+    best_score = float("-inf")  # this might cause bugs later...
     best_child = None
     best_action = None
     for curr_action, curr_child in node.children.items():
-        curr_score = ucb_score(config, node, curr_child, min_max_stats) 
+        curr_score = ucb_score(config, node, curr_child, min_max_stats)
+        print(f"Score obtained from ucb_score:{curr_score}")
         if curr_score > best_score:
             best_child = curr_child
             best_score = curr_score
@@ -100,14 +106,17 @@ def ucb_score(config, parent, child, min_max_stats):
     """
     Compute UCB Score of a child given the parent statistics
     """
-    pb_c = np.log((parent.visit_count + config.pb_c_base + 1)
-                  / config.pb_c_base) + config.pb_c_init
+    pb_c = (
+        np.log((parent.visit_count + config.pb_c_base + 1) / config.pb_c_base)
+        + config.pb_c_init
+    )
     pb_c *= np.sqrt(parent.visit_count) / (child.visit_count + 1)
 
-    prior_score = pb_c*child.prior
+    prior_score = pb_c * child.prior
     if child.visit_count > 0:
         value_score = min_max_stats.normalize(
-            child.reward + config.discount*child.value())
+            child.reward + config.discount * child.value()
+        )
     else:
         value_score = 0
     return prior_score + value_score
@@ -126,21 +135,28 @@ def expand_root(node, actions, network, current_state):
 
     Return: the value of the root
     """
-    # Get hidden state representation
-    # TODO: Check if transformed_value is correct
-    transformed_value, reward, policy_logits, hidden_representation = \
-        network.initial_inference(current_state)
+    if isinstance(current_state, tuple):
+        current_state, _ = current_state
+
+    # Get hidden state representation so the network doesn't complain
+    current_state_arr = np.expand_dims(current_state, axis=0)
+    transformed_value, reward, policy_logits, hidden_representation = (
+        network.initial_inference(current_state_arr)
+    )
 
     # Extract softmax policy and set node.policy
-    assert policy_logits.ndim == 1 # TODO: Fix this if not the case
-    softmax_policy = np.exp(policy_logits) / sum(np.exp(policy_logits))
-    node.prior = softmax_policy # set root node's policy to match action selection distribution
+    # check policy logits gives a 1D vector
+    assert policy_logits.ndim == 2
+    assert policy_logits.shape[0] == 1 or policy_logits.shape[1] == 1
+
+    softmax_policy = tf.exp(policy_logits) / tf.math.reduce_sum(tf.exp(policy_logits))
+    node.policy = softmax_policy
     node.hidden_representation = hidden_representation
     node.reward = reward
 
-    # instantiate node's children with prior values, obtained from the predicted policy
-    # We need one child for each action
-    node.children = {action: Node(softmax_policy) for action in actions}
+    node.children = {
+        action: Node(softmax_policy[0][i]) for i, action in enumerate(actions)
+    }
     node.expanded = True
 
     return transformed_value
@@ -155,22 +171,23 @@ def expand_node(node, actions, network, parent_state, parent_action):
 
     Return: value
     """
-    # Note that parent_state is already a hidden state representation.
-    # Get hidden state representation
-    # TODO: Check if transformed_value is correct
-    transformed_value, reward, policy_logits, hidden_representation = \
+    transformed_value, reward, policy_logits, hidden_representation = (
         network.recurrent_inference(parent_state, parent_action)
+    )
 
     # Extract softmax policy and set node.policy
-    assert policy_logits.ndim == 1 # TODO: Fix this if not the case
-    softmax_policy = np.exp(policy_logits) / sum(np.exp(policy_logits))
-    node.prior = softmax_policy
+    # check policy logits gives a 1D vector
+    assert policy_logits.ndim == 2
+    assert policy_logits.shape[0] == 1 or policy_logits.shape[1] == 1
+
+    softmax_policy = tf.exp(policy_logits) / tf.math.reduce_sum(tf.exp(policy_logits))
+    node.policy = softmax_policy
     node.hidden_representation = hidden_representation
     node.reward = reward
 
-    # instantiate node's children with prior values, obtained from the predicted policy
-    # We need one child for each action
-    node.children = {action: Node(softmax_policy) for action in actions}
+    node.children = {
+        action: Node(softmax_policy[0][i]) for i, action in enumerate(actions)
+    }
     node.expanded = True
 
     return transformed_value
@@ -190,7 +207,7 @@ def backpropagate(path, value, discount, min_max_stats):
     # G^l = v^l
     # G^l-1 = r_{l} + gamma * v^l
     # G^l-2 = r_{l-1} + gamma_{r_l} + gamma ^ 2 * v^l
-    # 
+    #
     # G^k = sum (gamma * r) + gamma * v   (Equation 3)
     # First component is g_a, second is g_b
     g_a = 0
@@ -221,10 +238,10 @@ def add_exploration_noise(config, node):
     This is governed by root_dirichlet_alpha and root_exploration_fraction
     """
     actions = list(node.children.keys())
-    noise = np.random.dirichlet([config.root_dirichlet_alpha]*len(actions))
+    noise = np.random.dirichlet([config.root_dirichlet_alpha] * len(actions))
     frac = config.root_exploration_fraction
     for a, n in zip(actions, noise):
-        node.children[a].prior = node.children[a].prior * (1-frac) + n*frac
+        node.children[a].prior = node.children[a].prior * (1 - frac) + n * frac
 
 
 def visit_softmax_temperature(num_moves):
@@ -250,12 +267,14 @@ def softmax_sample(visit_counts, temperature):
     assert temperature >= 0
 
     if temperature == 0:
-        return max(visit_counts)[1] # tuple comparison uses the first element.
-    
-    visit_counts, actions = list(zip(*visit_counts)) # unzip
+        return max(visit_counts)[1]  # tuple comparison uses the first element.
+
+    visit_counts, actions = list(zip(*visit_counts))  # unzip
 
     weighted_counts = [count ** (1 / temperature) for count in visit_counts]
-    probs = [weighted_count / sum(weighted_counts) for weighted_count in weighted_counts]
+    probs = [
+        weighted_count / sum(weighted_counts) for weighted_count in weighted_counts
+    ]
 
     action = choices(actions, weights=probs, k=1)[0]
     return action
