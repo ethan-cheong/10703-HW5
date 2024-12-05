@@ -5,7 +5,7 @@ from networks import CartPoleNetwork, train_network
 from mcts import Node
 from mcts import expand_root, add_exploration_noise, run_mcts
 from mcts import select_action, backpropagate
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers.legacy import Adam
 
 from tensorflow import expand_dims
 
@@ -67,9 +67,7 @@ def play_game(config: MuZeroConfig, network: CartPoleNetwork, env, games_played)
     games_played: how many games played, used in visit_softmax_temperature_fn
     """
     # env.seed(1) Use for reproducibility of trajectories
-    start_state, _ = env.reset()
-    if start_state.ndim == 1:
-        expand_dims(start_state, axis=-1)
+    start_state = env.reset()[0]
 
     # Create Game Objects
     game = Game(config.action_space_size, config.discount, start_state)
@@ -109,7 +107,7 @@ def test(
     returns = 0
     for _ in range(config.episodes_per_test):
         # env.seed(1) Use for reproducibility of trajectories
-        start_state = env.reset()
+        start_state = env.reset()[0]
         game = Game(config.action_space_size, config.discount, start_state)
         while not game.done and len(game.action_history) < config.max_moves:
             min_max_stats = MinMaxStats(config.known_bounds)

@@ -143,7 +143,10 @@ class CartPoleNetwork(BaseNetwork):
         target_value = tf.math.sign(target_value) * (
             tf.math.sqrt(tf.math.abs(target_value) + 1) - 1 + 0.001 * target_value
         )
-        target_value = tf.clip_by_value(target_value, 0, self.value_support_size)
+        # had to include this hacky fix so that floor is strictly less than self.value_support_size
+        target_value = tf.clip_by_value(
+            target_value, 0, self.value_support_size - 1e-100
+        )
         floor = tf.math.floor(target_value)
         rest = target_value - floor
         targets[range(batch), tf.cast(floor, tf.int32)] = 1 - rest
@@ -274,17 +277,39 @@ def update_weights(config, network, optimizer, batch, train_results):
         (state_batch, targets_init_batch, targets_recurrent_batch, actions_batch) = (
             batch
         )
+        state_batch_temp = []
+        for elem in state_batch:
+            if isinstance(elem, tuple):
+                elem, _ = elem
+            state_batch_temp.append(elem)
 
+        state_batch = tf.stack(state_batch_temp)
         # YOUR CODE HERE: Perform initial embedding of state batch
+        representations_batch, values_batch, policies_batch = (
+            network.initial_model.call(state_batch)
+        )
 
         target_value_batch, _, target_policy_batch = zip(*targets_init_batch)
         # Use this to convert scalar value targets to categorical representation
         # This now matches output of initial_model, and can be used with cross entropy loss
         target_value_batch = network._scalar_to_support(
-            tf.convert_to_tensor(target_value_batch)
+            # Clip values so you don't get the ValueError: Can't convert Python sequence with a value out of range for a double-precision float
+            tf.convert_to_tensor(np.clip(target_value_batch, -1e308, 1e308))
         )
+
         # YOUR CODE HERE: Compute the loss of the first pass (no reward loss)
+        total_value_loss = tf.math.reduce_sum(
+            tf.nn.softmax_cross_entropy_with_logits(
+                labels=target_value_batch, logits=values_batch
+            )
+        )
+        total_policy_loss = tf.math.reduce_sum(
+            tf.nn.softmax_cross_entropy_with_logits(
+                labels=target_policy_batch, logits=policies_batch
+            )
+        )
         # Remember to scale value loss!
+        loss = 0.25 * total_value_loss + total_policy_loss
 
         for actions_batch, targets_batch in zip(actions_batch, targets_recurrent_batch):
             target_value_batch, target_reward_batch, target_policy_batch = zip(
@@ -292,9 +317,16 @@ def update_weights(config, network, optimizer, batch, train_results):
             )
             # YOUR CODE HERE:
             # Create conditioned_representation: concatenate representations with actions batch
+            conditioned_representation = tf.concat(
+                concat_dim=1, values=[representations_batch, actions_batch]
+            )
             # Recurrent step from conditioned representation: recurrent + prediction networks
+            representations_batch, rewards_batch, values_batch, policy_logits_batch = (
+                network.recurrent_model.call(conditioned_representation)
+            )
 
             # Same as above, convert scalar targets to categorical
+            target_value_batch = np.clip(target_value_batch, -1e308, 1e308)
             target_value_batch = tf.convert_to_tensor(target_value_batch)
             target_value_batch = network._scalar_to_support(target_value_batch)
 
@@ -302,12 +334,30 @@ def update_weights(config, network, optimizer, batch, train_results):
             target_reward_batch = tf.convert_to_tensor(target_reward_batch)
 
             # YOUR CODE HERE: Compute value loss, reward loss, policy loss
-            # Remember to scale value loss!
-            # Add to total losses
+            value_loss = tf.math.reduce_sum(
+                tf.nn.softmax_cross_entropy_with_logits(
+                    labels=target_value_batch, logits=values_batch
+                )
+            )
+            policy_loss = tf.math.reduce_sum(
+                tf.nn.softmax_cross_entropy_with_logits(
+                    labels=target_policy_batch, logits=policy_logits_batch
+                )
+            )
+            reward_loss = tf.math.reduce_sum(
+                tf.keras.losses.MSE(target_reward_batch, rewards_batch)
+            )
+            total_value_loss += value_loss
+            total_policy_loss += policy_loss
+            total_reward_loss += reward_loss
+            loss_step = 0.25 * total_value_loss + total_policy_loss + total_reward_loss
+            # scale gradient of loss
+            loss_step = scale_gradient(loss_step, 1 / config.num_unroll_steps)
+            loss += loss_step
 
             # YOUR CODE HERE: Half the gradient of the representation
+            representations_batch = scale_gradient(representations_batch, 0.5)
 
-            # YOUR CODE HERE: Sum the losses, scale gradient of the loss, add to overall loss
         train_results.total_losses.append(loss)
         train_results.value_losses.append(total_value_loss)
         train_results.policy_losses.append(total_policy_loss)

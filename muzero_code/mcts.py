@@ -94,7 +94,6 @@ def select_child(config, node: Node, min_max_stats):
     best_action = None
     for curr_action, curr_child in node.children.items():
         curr_score = ucb_score(config, node, curr_child, min_max_stats)
-        print(f"Score obtained from ucb_score:{curr_score}")
         if curr_score > best_score:
             best_child = curr_child
             best_score = curr_score
