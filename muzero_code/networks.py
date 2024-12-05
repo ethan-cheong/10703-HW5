@@ -145,7 +145,7 @@ class CartPoleNetwork(BaseNetwork):
         )
         # had to include this hacky fix so that floor is strictly less than self.value_support_size
         target_value = tf.clip_by_value(
-            target_value, 0, self.value_support_size - 1e-100
+            target_value, 0, self.value_support_size - 1e-10
         )
         floor = tf.math.floor(target_value)
         rest = target_value - floor
@@ -317,8 +317,12 @@ def update_weights(config, network, optimizer, batch, train_results):
             )
             # YOUR CODE HERE:
             # Create conditioned_representation: concatenate representations with actions batch
+            # one-hot encode actions
+            actions_batch = tf.one_hot(
+                actions_batch, depth=2, on_value=1.0, off_value=0.0, axis=-1
+            )
             conditioned_representation = tf.concat(
-                concat_dim=1, values=[representations_batch, actions_batch]
+                values=[representations_batch, actions_batch], axis=1
             )
             # Recurrent step from conditioned representation: recurrent + prediction networks
             representations_batch, rewards_batch, values_batch, policy_logits_batch = (
@@ -366,4 +370,3 @@ def update_weights(config, network, optimizer, batch, train_results):
 
     optimizer.minimize(loss=loss, var_list=network.cb_get_variables())
     network.train_steps += 1
-    raise NotImplementedError()

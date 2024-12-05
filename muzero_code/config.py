@@ -4,9 +4,9 @@ from mcts import visit_softmax_temperature
 import matplotlib.pyplot as plt
 import numpy as np
 
-MAX_FLOAT_VAL = float('inf')
+MAX_FLOAT_VAL = float("inf")
 
-KnownBounds = collections.namedtuple('KnownBounds', ['min', 'max'])
+KnownBounds = collections.namedtuple("KnownBounds", ["min", "max"])
 
 
 class TrainResults(object):
@@ -90,22 +90,24 @@ class MinMaxStats(object):
 
 class MuZeroConfig(object):
 
-    def __init__(self,
-                 action_space_size: int,
-                 max_moves: int,
-                 discount: float,
-                 dirichlet_alpha: float,
-                 num_simulations: int,
-                 batch_size: int,
-                 buffer_size: int,
-                 td_steps: int,
-                 lr_init: float,
-                 visit_softmax_temperature_fn,
-                 num_epochs: int,
-                 games_per_epoch: int,
-                 train_per_epoch: int,
-                 episodes_per_test: int,
-                 known_bounds: Optional[KnownBounds] = None):
+    def __init__(
+        self,
+        action_space_size: int,
+        max_moves: int,
+        discount: float,
+        dirichlet_alpha: float,
+        num_simulations: int,
+        batch_size: int,
+        buffer_size: int,
+        td_steps: int,
+        lr_init: float,
+        visit_softmax_temperature_fn,
+        num_epochs: int,
+        games_per_epoch: int,
+        train_per_epoch: int,
+        episodes_per_test: int,
+        known_bounds: Optional[KnownBounds] = None,
+    ):
 
         # Self-Play
         self.action_space_size = action_space_size
@@ -144,7 +146,7 @@ def get_cartpole_config(num_simulations=50):
     return MuZeroConfig(
         action_space_size=2,  # size of action space
         max_moves=200,  # number of moves in game
-        discount=0.997,   # recommened 0.997
+        discount=0.997,  # recommened 0.997
         dirichlet_alpha=0.1,  # exploration noise at root, very important
         num_simulations=num_simulations,  # number of MCTS rollouts
         batch_size=512,
@@ -157,5 +159,5 @@ def get_cartpole_config(num_simulations=50):
         num_epochs=50,
         games_per_epoch=20,
         train_per_epoch=30,
-        episodes_per_test=10
+        episodes_per_test=10,
     )
