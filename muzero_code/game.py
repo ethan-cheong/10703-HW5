@@ -11,7 +11,6 @@ for i, v in enumerate(itertools.product(DISC, DISC, DISC, DISC)):
 
 
 class Game:
-
     def __init__(self, action_space_size, discount, curr_state):
         """
         Game class
@@ -41,22 +40,11 @@ class Game:
         2. Stores the normalized root node child visits, this is the POLICY target
         """
         sum_visits = sum(child.visit_count for child in root.children.values())
-        self.child_visits.append(
-            np.array(
-                [
-                    (
-                        root.children[a].visit_count / sum_visits
-                        if a in root.children
-                        else 0
-                    )
-                    for a in range(self.action_space_size)
-                ]
-            )
-        )
+        self.child_visits.append(np.array([(root.children[a].visit_count / sum_visits if a in root.children else 0) for a in range(self.action_space_size)]))
         self.root_values.append(root.value())
 
     def action(self, action, env):
-        obs, reward, done, _, _ = env.step(action)
+        obs, reward, done, _ = env.step(action)
         # Only for walker environment
         # obs, reward, done, _ = env.step(CONVERTER[action])
         self.curr_state = obs
@@ -93,9 +81,7 @@ class Game:
             else:
                 value = 0
 
-            for i, reward in enumerate(
-                self.reward_history[current_index:bootstrap_index]
-            ):
+            for i, reward in enumerate(self.reward_history[current_index:bootstrap_index]):
                 value += reward * (self.discount**i)
 
             if current_index > 0 and current_index <= len(self.reward_history):

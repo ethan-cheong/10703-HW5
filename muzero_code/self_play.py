@@ -5,17 +5,13 @@ from networks import CartPoleNetwork, train_network
 from mcts import Node
 from mcts import expand_root, add_exploration_noise, run_mcts
 from mcts import select_action, backpropagate
-from tensorflow.keras.optimizers.legacy import Adam
-
-from tensorflow import expand_dims
+from tensorflow.keras.optimizers import Adam
 
 CARTPOLE_STOP_REWARD = 195
 LAST_N = 40
 
 
-def self_play(
-    env, config: MuZeroConfig, replay_buffer: ReplayBuffer, network: CartPoleNetwork
-):
+def self_play(env, config: MuZeroConfig, replay_buffer: ReplayBuffer, network: CartPoleNetwork):
     # Create optimizer for training
     optimizer = Adam(learning_rate=config.lr_init)
     games_played = 0
@@ -23,9 +19,7 @@ def self_play(
     train_results = TrainResults()
     for i in range(config.num_epochs):  # Number of Steps of train/play alternations
         print(f"Epoch Number {i}")
-        games_played, score = play_games(
-            config, replay_buffer, network, env, games_played
-        )
+        games_played, score = play_games(config, replay_buffer, network, env, games_played)
         print("Train score:", score)
         train_network(config, network, replay_buffer, optimizer, train_results)
         print("Eval score:", test(config, network, env, test_rewards))
@@ -67,8 +61,7 @@ def play_game(config: MuZeroConfig, network: CartPoleNetwork, env, games_played)
     games_played: how many games played, used in visit_softmax_temperature_fn
     """
     # env.seed(1) Use for reproducibility of trajectories
-    start_state = env.reset()[0]
-
+    start_state = env.reset()
     # Create Game Objects
     game = Game(config.action_space_size, config.discount, start_state)
     while not game.done and len(game.action_history) < config.max_moves:
@@ -77,9 +70,7 @@ def play_game(config: MuZeroConfig, network: CartPoleNetwork, env, games_played)
         curr_state = game.curr_state
         root = Node(0)
         # Expand root and backpropagate once
-        value = expand_root(
-            root, list(range(config.action_space_size)), network, curr_state
-        )
+        value = expand_root(root, list(range(config.action_space_size)), network, curr_state)
         backpropagate([root], value, config.discount, min_max_stats)
         add_exploration_noise(config, root)
         # Run MCTS
@@ -93,9 +84,7 @@ def play_game(config: MuZeroConfig, network: CartPoleNetwork, env, games_played)
     return game
 
 
-def test(
-    config: MuZeroConfig, network: CartPoleNetwork, env, test_rewards: TestResults
-):
+def test(config: MuZeroConfig, network: CartPoleNetwork, env, test_rewards: TestResults):
     """
     Using a trained network_model, test games
     config: configurations for muzero
@@ -107,21 +96,17 @@ def test(
     returns = 0
     for _ in range(config.episodes_per_test):
         # env.seed(1) Use for reproducibility of trajectories
-        start_state = env.reset()[0]
+        start_state = env.reset()
         game = Game(config.action_space_size, config.discount, start_state)
         while not game.done and len(game.action_history) < config.max_moves:
             min_max_stats = MinMaxStats(config.known_bounds)
             curr_state = game.curr_state
             root = Node(0)
-            value = expand_root(
-                root, list(range(config.action_space_size)), network, curr_state
-            )
+            value = expand_root(root, list(range(config.action_space_size)), network, curr_state)
             backpropagate([root], value, config.discount, min_max_stats)
             # Run MCTS
             run_mcts(config, root, network, min_max_stats)
-            action = select_action(
-                config, len(game.action_history), root, network, test=True
-            )
+            action = select_action(config, len(game.action_history), root, network, test=True)
             game.action(action, env)
         total_reward = sum(game.reward_history)
         print(f"Total reward for game: {total_reward}")

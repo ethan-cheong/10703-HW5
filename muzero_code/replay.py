@@ -3,7 +3,6 @@ from collections import deque
 
 
 class ReplayBuffer(object):
-
     def __init__(self, config):
         self.buffer_size = config.buffer_size
         self.batch_size = config.batch_size
@@ -24,16 +23,13 @@ class ReplayBuffer(object):
         games = [self.sample_game() for _ in range(self.batch_size)]
         game_pos = [self.sample_position(g) for g in games]
         batch = []
-        for (g, i) in zip(games, game_pos):
-            targets, actions = g.make_target(
-                i, self.unroll_steps, self.td_steps)
-            batch.append(
-                (g.state_history[i], actions, targets))
+        for g, i in zip(games, game_pos):
+            targets, actions = g.make_target(i, self.unroll_steps, self.td_steps)
+            batch.append((g.state_history[i], actions, targets))
         state_batch, actions_batch, targets_batch = zip(*batch)
         actions_batch = list(zip(*actions_batch))
         targets_init_batch, *targets_recurrent_batch = zip(*targets_batch)
-        batch = (state_batch, targets_init_batch, targets_recurrent_batch,
-                 actions_batch)
+        batch = (state_batch, targets_init_batch, targets_recurrent_batch, actions_batch)
 
         return batch
 
@@ -49,6 +45,5 @@ class ReplayBuffer(object):
         """
         Sample a random position from the game to start unrolling
         """
-        sampled_index = np.random.randint(
-            len(game.reward_history)-self.unroll_steps)
+        sampled_index = np.random.randint(len(game.reward_history) - self.unroll_steps)
         return sampled_index

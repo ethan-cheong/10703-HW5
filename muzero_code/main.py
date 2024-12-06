@@ -33,9 +33,7 @@ if __name__ == "__main__":
     # Set seeds for reproducibility
     set_seeds()
     # Create the cartpole network
-    network = CartPoleNetwork(
-        action_size=2, state_shape=(None, 4), embedding_size=4, max_value=200
-    )
+    network = CartPoleNetwork(action_size=2, state_shape=(None, 4), embedding_size=4, max_value=200)
     print("Network Made")
     # Set the configuration for muzero
     config = get_cartpole_config(args.num_simulations)  # Create Environment

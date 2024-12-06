@@ -1,10 +1,8 @@
 import numpy as np
-from random import choices
 import tensorflow as tf
 
 
 class Node(object):
-
     def __init__(self, prior):
         """
         Node in MCTS
@@ -68,9 +66,7 @@ def select_action(config, num_moves, node, network, test=False):
     with temperature t
     If in test mode: action selection should be performed with argmax
     """
-    visit_counts = [
-        (child.visit_count, action) for action, child in node.children.items()
-    ]
+    visit_counts = [(child.visit_count, action) for action, child in node.children.items()]
     if not test:
         t = config.visit_softmax_temperature_fn(num_moves=num_moves)
         action = softmax_sample(visit_counts, t)
@@ -86,36 +82,26 @@ def select_child(config, node: Node, min_max_stats):
     This should be done using the UCB score, which uses the
     normalized Q values from the min max stats
     """
-    if not node.children:
-        raise Exception("select_child called on node with no children")
-
-    best_score = float("-inf")  # this might cause bugs later...
-    best_child = None
-    best_action = None
-    for curr_action, curr_child in node.children.items():
-        curr_score = ucb_score(config, node, curr_child, min_max_stats)
-        if curr_score > best_score:
-            best_child = curr_child
-            best_score = curr_score
-            best_action = curr_action
-    return best_action, best_child
+    # Compute UCB scores for all children
+    scores = []
+    for action, child in node.children.items():
+        score = ucb_score(config, node, child, min_max_stats)
+        scores.append((score, action, child))
+    # Select action-child pair with max score
+    _, action, child = max(scores, key=lambda x: x[0])
+    return action, child
 
 
 def ucb_score(config, parent, child, min_max_stats):
     """
     Compute UCB Score of a child given the parent statistics
     """
-    pb_c = (
-        np.log((parent.visit_count + config.pb_c_base + 1) / config.pb_c_base)
-        + config.pb_c_init
-    )
+    pb_c = np.log((parent.visit_count + config.pb_c_base + 1) / config.pb_c_base) + config.pb_c_init
     pb_c *= np.sqrt(parent.visit_count) / (child.visit_count + 1)
 
     prior_score = pb_c * child.prior
     if child.visit_count > 0:
-        value_score = min_max_stats.normalize(
-            child.reward + config.discount * child.value()
-        )
+        value_score = min_max_stats.normalize(child.reward + config.discount * child.value())
     else:
         value_score = 0
     return prior_score + value_score
@@ -134,31 +120,22 @@ def expand_root(node, actions, network, current_state):
 
     Return: the value of the root
     """
-    if isinstance(current_state, tuple):
-        current_state, _ = current_state
+    # Perform initial inference
+    # initial_inference returns: value, reward=0, policy_logits, hidden_representation
+    value, reward, policy_logits, hidden_representation = network.initial_inference(np.expand_dims(current_state, axis=0))
 
-    # Get hidden state representation so the network doesn't complain
-    current_state_arr = np.expand_dims(current_state, axis=0)
-    transformed_value, reward, policy_logits, hidden_representation = (
-        network.initial_inference(current_state_arr)
-    )
-
-    # Extract softmax policy and set node.policy
-    # check policy logits gives a 1D vector
-    assert policy_logits.ndim == 2
-    assert policy_logits.shape[0] == 1 or policy_logits.shape[1] == 1
-
-    softmax_policy = tf.exp(policy_logits) / tf.math.reduce_sum(tf.exp(policy_logits))
-    node.policy = softmax_policy
     node.hidden_representation = hidden_representation
     node.reward = reward
-
-    node.children = {
-        action: Node(softmax_policy[0][i]) for i, action in enumerate(actions)
-    }
     node.expanded = True
 
-    return transformed_value
+    # Compute softmax over policy_logits
+    policy = tf.nn.softmax(policy_logits).numpy()[0]
+
+    # Create children
+    for a, p in zip(actions, policy):
+        node.children[a] = Node(prior=p)
+
+    return value
 
 
 def expand_node(node, actions, network, parent_state, parent_action):
@@ -170,26 +147,22 @@ def expand_node(node, actions, network, parent_state, parent_action):
 
     Return: value
     """
-    transformed_value, reward, policy_logits, hidden_representation = (
-        network.recurrent_inference(parent_state, parent_action)
-    )
+    # Perform recurrent inference
+    # recurrent_inference returns: value, reward, policy_logits, hidden_representation
+    value, reward, policy_logits, hidden_representation = network.recurrent_inference(parent_state, parent_action)
 
-    # Extract softmax policy and set node.policy
-    # check policy logits gives a 1D vector
-    assert policy_logits.ndim == 2
-    assert policy_logits.shape[0] == 1 or policy_logits.shape[1] == 1
-
-    softmax_policy = tf.exp(policy_logits) / tf.math.reduce_sum(tf.exp(policy_logits))
-    node.policy = softmax_policy
     node.hidden_representation = hidden_representation
     node.reward = reward
-
-    node.children = {
-        action: Node(softmax_policy[0][i]) for i, action in enumerate(actions)
-    }
     node.expanded = True
 
-    return transformed_value
+    # Compute softmax over policy_logits
+    policy = tf.nn.softmax(policy_logits).numpy()[0]
+
+    # Create children
+    for a, p in zip(actions, policy):
+        node.children[a] = Node(prior=p)
+
+    return value
 
 
 def backpropagate(path, value, discount, min_max_stats):
@@ -200,35 +173,13 @@ def backpropagate(path, value, discount, min_max_stats):
 
     Update the value with discount and reward of node
     """
-
-    # Idea:
-    # calculate G^k for each node
-    # G^l = v^l
-    # G^l-1 = r_{l} + gamma * v^l
-    # G^l-2 = r_{l-1} + gamma_{r_l} + gamma ^ 2 * v^l
-    #
-    # G^k = sum (gamma * r) + gamma * v   (Equation 3)
-    # First component is g_a, second is g_b
-    g_a = 0
-    g_b = 0
-    last_node = True
-    prev_node = None
+    # Traverse nodes in reverse order
     for node in reversed(path):
-        # calculate G^k for each note
-        if last_node:
-            g_b = value
-        else:
-            g_a = (discount * g_a) + prev_node.reward
-            g_b = g_b * discount
-        prev_node = node
-
-        g = g_a + g_b
-
-        # Update statistics
-        node.value_sum = node.visit_count * node.value_sum + g
         node.visit_count += 1
-
+        node.value_sum += value
         min_max_stats.update(node.value())
+        # Update value for next node up the chain
+        value = node.reward + discount * value
 
 
 def add_exploration_noise(config, node):
@@ -263,19 +214,14 @@ def softmax_sample(visit_counts, temperature):
     If temperature == 0, choose argmax
     Else: Compute distribution over visit_counts and sample action as in writeup
     """
-    assert temperature >= 0
-
+    # visit_counts = [(visit_count, action), ...]
+    counts = np.array([vc for vc, a in visit_counts])
     if temperature == 0:
-        return max(visit_counts)[1]  # tuple comparison uses the first element.
-
-    visit_counts, actions = list(zip(*visit_counts))  # unzip
-
-    weighted_counts = [count ** (1 / temperature) for count in visit_counts]
-    probs = [
-        weighted_count / sum(weighted_counts) for weighted_count in weighted_counts
-    ]
-
-    action = choices(actions, weights=probs, k=1)[0]
-    return action
-
-    # raise NotImplementedError()
+        # Argmax selection
+        max_index = np.argmax(counts)
+        return visit_counts[max_index][1]
+    else:
+        # Compute distribution p(a) = N(a)^(1/T) / sum(N(b)^(1/T))
+        counts = counts ** (1.0 / temperature)
+        probs = counts / np.sum(counts)
+        return np.random.choice([a for _, a in visit_counts], p=probs)

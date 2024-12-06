@@ -6,7 +6,6 @@ from tensorflow.keras.models import Model
 
 
 class AbstractNetwork(ABC):
-
     def __init__(self):
         self.train_steps = 0
 
@@ -64,8 +63,7 @@ class BaseNetwork(AbstractNetwork):
     Base class that contains all the networks and models of MuZero.
     """
 
-    def __init__(self, representation_network: Model, value_network: Model, policy_network: Model,
-                 dynamic_network: Model, reward_network: Model):
+    def __init__(self, representation_network: Model, value_network: Model, policy_network: Model, dynamic_network: Model, reward_network: Model):
         super().__init__()
         # Networks blocks
         self.representation_network = representation_network
@@ -75,10 +73,8 @@ class BaseNetwork(AbstractNetwork):
         self.reward_network = reward_network
 
         # Models for inference and training
-        self.initial_model = InitialModel(
-            self.representation_network, self.value_network, self.policy_network)
-        self.recurrent_model = RecurrentModel(self.dynamic_network, self.reward_network, self.value_network,
-                                              self.policy_network)
+        self.initial_model = InitialModel(self.representation_network, self.value_network, self.policy_network)
+        self.recurrent_model = RecurrentModel(self.dynamic_network, self.reward_network, self.value_network, self.policy_network)
 
     def initial_inference(self, state: np.array):
         """
@@ -86,8 +82,7 @@ class BaseNetwork(AbstractNetwork):
         Initial Inference produces 0 reward
         """
 
-        hidden_representation, value, policy_logits = self.initial_model.__call__(
-            state)
+        hidden_representation, value, policy_logits = self.initial_model.__call__(state)
         return self._value_transform(value), 0, policy_logits, hidden_representation
 
     def recurrent_inference(self, hidden_state: np.array, action: int):
@@ -95,10 +90,8 @@ class BaseNetwork(AbstractNetwork):
         dynamics + prediction function
         """
 
-        conditioned_hidden = self._conditioned_hidden_state(
-            hidden_state, action)
-        hidden_representation, reward, value, policy_logits = self.recurrent_model.__call__(
-            conditioned_hidden)
+        conditioned_hidden = self._conditioned_hidden_state(hidden_state, action)
+        hidden_representation, reward, value, policy_logits = self.recurrent_model.__call__(conditioned_hidden)
 
         return self._value_transform(value), self._reward_transform(reward), policy_logits, hidden_representation
 
@@ -118,10 +111,7 @@ class BaseNetwork(AbstractNetwork):
         """Return a callback that return the trainable variables of the network."""
 
         def get_variables():
-            networks = (self.representation_network, self.value_network, self.policy_network,
-                        self.dynamic_network, self.reward_network)
-            return [variables
-                    for variables_list in map(lambda n: n.trainable_weights, networks)
-                    for variables in variables_list]
+            networks = (self.representation_network, self.value_network, self.policy_network, self.dynamic_network, self.reward_network)
+            return [variables for variables_list in map(lambda n: n.trainable_weights, networks) for variables in variables_list]
 
         return get_variables

@@ -10,7 +10,6 @@ KnownBounds = collections.namedtuple("KnownBounds", ["min", "max"])
 
 
 class TrainResults(object):
-
     def __init__(self):
         self.value_losses = []
         self.reward_losses = []
@@ -44,7 +43,6 @@ class TrainResults(object):
 
 
 class TestResults(object):
-
     def __init__(self):
         self.test_rewards = []
 
@@ -89,7 +87,6 @@ class MinMaxStats(object):
 
 
 class MuZeroConfig(object):
-
     def __init__(
         self,
         action_space_size: int,
@@ -108,7 +105,6 @@ class MuZeroConfig(object):
         episodes_per_test: int,
         known_bounds: Optional[KnownBounds] = None,
     ):
-
         # Self-Play
         self.action_space_size = action_space_size
         self.games_per_epoch = games_per_epoch

@@ -1,7 +1,8 @@
 # 403_muzero
-# Homework created by Alex Singh and Robin Schmucker
-MuZero HW
 
+# Homework created by Alex Singh and Robin Schmucker
+
+MuZero HW
 
 In this assignment you will implement a version of MuZero on a simple Cartpole environment.
 
@@ -24,4 +25,3 @@ networks_base.py: In this file, we specify some abstract classes for holding all
 networks.py: In this file, we specify the network architectures and training loop.
 
 replay.py: In this file, we specify the replay buffer and associated sampling.
-

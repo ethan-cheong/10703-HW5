@@ -21,13 +21,10 @@ def action_to_one_hot(action, action_space_size):
     """
     Compute one hot of action to be combined with state representation
     """
-    return np.array(
-        [1 if i == action else 0 for i in range(action_space_size)]
-    ).reshape(1, -1)
+    return np.array([1 if i == action else 0 for i in range(action_space_size)]).reshape(1, -1)
 
 
 class CartPoleNetwork(BaseNetwork):
-
     def __init__(self, action_size, state_shape, embedding_size, max_value):
         """
         Defines the CartPoleNetwork
@@ -127,26 +124,14 @@ class CartPoleNetwork(BaseNetwork):
         value = self._softmax(value_support)
         # Change to -value_support_size -> value_support_size for full support
         value = np.dot(value, range(self.value_support_size))
-        value = tf.math.sign(value) * (
-            (
-                (tf.math.sqrt(1 + 4 * 0.001 * (tf.math.abs(value) + 1 + 0.001)) - 1)
-                / (2 * 0.001)
-            )
-            ** 2
-            - 1
-        )
+        value = tf.math.sign(value) * (((tf.math.sqrt(1 + 4 * 0.001 * (tf.math.abs(value) + 1 + 0.001)) - 1) / (2 * 0.001)) ** 2 - 1)
         return value.numpy()[0]
 
     def _scalar_to_support(self, target_value):
         batch = len(target_value)
         targets = np.zeros((batch, self.value_support_size))
-        target_value = tf.math.sign(target_value) * (
-            tf.math.sqrt(tf.math.abs(target_value) + 1) - 1 + 0.001 * target_value
-        )
-        # had to include this hacky fix so that floor is strictly less than self.value_support_size
-        target_value = tf.clip_by_value(
-            target_value, 0, self.value_support_size - 1e-10
-        )
+        target_value = tf.math.sign(target_value) * (tf.math.sqrt(tf.math.abs(target_value) + 1) - 1 + 0.001 * target_value)
+        target_value = tf.clip_by_value(target_value, 0, self.value_support_size)
         floor = tf.math.floor(target_value)
         rest = target_value - floor
         targets[range(batch), tf.cast(floor, tf.int32)] = 1 - rest
@@ -162,17 +147,13 @@ class CartPoleNetwork(BaseNetwork):
         """
         No reward transform for cartpole
         """
-        return np.asscalar(reward.numpy()[0])
+        return float(reward.numpy()[0])
 
-    def _conditioned_hidden_state(
-        self, hidden_state: np.array, action: int
-    ) -> np.array:
+    def _conditioned_hidden_state(self, hidden_state: np.array, action: int) -> np.array:
         """
         concatenate the hidden state and action for input to recurrent model
         """
-        conditioned_hidden = tf.concat(
-            (hidden_state, action_to_one_hot(action, self.action_size)), axis=1
-        )
+        conditioned_hidden = tf.concat((hidden_state, action_to_one_hot(action, self.action_size)), axis=1)
         return conditioned_hidden
 
     def _softmax(self, values):
@@ -197,11 +178,7 @@ class CartPoleNetwork(BaseNetwork):
                 self.dynamic_network,
                 self.reward_network,
             )
-            return [
-                variables
-                for variables_list in map(lambda n: n.trainable_weights, networks)
-                for variables in variables_list
-            ]
+            return [variables for variables_list in map(lambda n: n.trainable_weights, networks) for variables in variables_list]
 
         return get_variables
 
@@ -210,14 +187,10 @@ class CartPoleNetwork(BaseNetwork):
         if not os.path.isdir(path):
             os.mkdir(path)
 
-        self.representation_network.save_weights(
-            path + "/representation_net"
-        )  # , save_format='h5py')
+        self.representation_network.save_weights(path + "/representation_net")  # , save_format='h5py')
         self.value_network.save_weights(path + "/value_net")  # , save_format='h5py')
         self.policy_network.save_weights(path + "/policy_net")  # , save_format='h5py')
-        self.dynamic_network.save_weights(
-            path + "/dynamic_net"
-        )  # , save_format='h5py')
+        self.dynamic_network.save_weights(path + "/dynamic_net")  # , save_format='h5py')
         self.reward_network.save_weights(path + "/reward_net")  # , save_format='h5py')
         print("saved network at path:", path)
 
@@ -267,105 +240,120 @@ def update_weights(config, network, optimizer, batch, train_results):
     Loss Note: The policy outputs are the logits, same with the value categorical representation
     You should use tf.nn.softmax_cross_entropy_with_logits to compute the loss in these cases
     """
+    (state_batch, targets_init_batch, targets_recurrent_batch, actions_batch) = batch
 
-    # for every game in sample batch, unroll and update network_model weights
-    def loss():
-        loss = 0
-        total_value_loss = 0
-        total_reward_loss = 0
-        total_policy_loss = 0
-        (state_batch, targets_init_batch, targets_recurrent_batch, actions_batch) = (
-            batch
-        )
-        state_batch_temp = []
-        for elem in state_batch:
-            if isinstance(elem, tuple):
-                elem, _ = elem
-            state_batch_temp.append(elem)
+    # Convert to tensors
+    state_batch = tf.convert_to_tensor(state_batch, dtype=tf.float32)
 
-        state_batch = tf.stack(state_batch_temp)
-        # YOUR CODE HERE: Perform initial embedding of state batch
-        representations_batch, values_batch, policies_batch = (
-            network.initial_model.call(state_batch)
-        )
+    # Extract initial targets: value, reward, policy
+    init_values, init_rewards, init_policies = zip(*targets_init_batch)
+    init_values = tf.convert_to_tensor(init_values, dtype=tf.float32)
+    init_policies = tf.convert_to_tensor(init_policies, dtype=tf.float32)
+    # initial rewards are always 0 at initial inference, so no need to compute reward loss initially
+    # Convert scalar values to categorical
+    init_values_support = network._scalar_to_support(init_values)
 
-        target_value_batch, _, target_policy_batch = zip(*targets_init_batch)
-        # Use this to convert scalar value targets to categorical representation
-        # This now matches output of initial_model, and can be used with cross entropy loss
-        target_value_batch = network._scalar_to_support(
-            # Clip values so you don't get the ValueError: Can't convert Python sequence with a value out of range for a double-precision float
-            tf.convert_to_tensor(np.clip(target_value_batch, -1e308, 1e308))
-        )
+    # For recurrent steps, we have a list of targets for each unroll step.
+    # targets_recurrent_batch: list of length num_unroll_steps
+    # Each element is a tuple of lists: (value, reward, policy) for each sample in the batch
 
-        # YOUR CODE HERE: Compute the loss of the first pass (no reward loss)
-        total_value_loss = tf.math.reduce_sum(
-            tf.nn.softmax_cross_entropy_with_logits(
-                labels=target_value_batch, logits=values_batch
-            )
-        )
-        total_policy_loss = tf.math.reduce_sum(
-            tf.nn.softmax_cross_entropy_with_logits(
-                labels=target_policy_batch, logits=policies_batch
-            )
-        )
-        # Remember to scale value loss!
-        loss = 0.25 * total_value_loss + total_policy_loss
+    num_unroll_steps = len(targets_recurrent_batch)
 
-        for actions_batch, targets_batch in zip(actions_batch, targets_recurrent_batch):
-            target_value_batch, target_reward_batch, target_policy_batch = zip(
-                *targets_batch
-            )
-            # YOUR CODE HERE:
-            # Create conditioned_representation: concatenate representations with actions batch
-            # one-hot encode actions
-            actions_batch = tf.one_hot(
-                actions_batch, depth=2, on_value=1.0, off_value=0.0, axis=-1
-            )
-            conditioned_representation = tf.concat(
-                values=[representations_batch, actions_batch], axis=1
-            )
-            # Recurrent step from conditioned representation: recurrent + prediction networks
-            representations_batch, rewards_batch, values_batch, policy_logits_batch = (
-                network.recurrent_model.call(conditioned_representation)
-            )
+    with tf.GradientTape() as tape:
+        # Initial inference
+        # initial_model(state_batch) returns: hidden_representation, value, policy_logits
+        hidden_rep, pred_value, pred_policy_logits = network.initial_model(state_batch)
 
-            target_value_batch, target_reward_batch, target_policy_batch = zip(*targets_batch)
-            target_value_batch = tf.convert_to_tensor(np.clip(target_value_batch, -1e308, 1e308))
-            target_value_batch = network._scalar_to_support(target_value_batch)
+        # Compute initial losses
+        # Value loss (cross entropy between pred_value and init_values_support)
+        value_loss = tf.nn.softmax_cross_entropy_with_logits(logits=pred_value, labels=init_values_support)
+        value_loss = tf.reduce_mean(value_loss)
 
-            target_policy_batch = tf.convert_to_tensor(target_policy_batch)
-            target_reward_batch = tf.convert_to_tensor(target_reward_batch)
+        # Policy loss (cross entropy)
+        policy_loss = tf.nn.softmax_cross_entropy_with_logits(logits=pred_policy_logits, labels=init_policies)
+        policy_loss = tf.reduce_mean(policy_loss)
 
-            # YOUR CODE HERE: Compute value loss, reward loss, policy loss
-            value_loss = tf.math.reduce_sum(
-                tf.nn.softmax_cross_entropy_with_logits(
-                    labels=target_value_batch, logits=values_batch
-                )
-            )
-            policy_loss = tf.math.reduce_sum(
-                tf.nn.softmax_cross_entropy_with_logits(
-                    labels=target_policy_batch, logits=policy_logits_batch
-                )
-            )
-            reward_loss = tf.math.reduce_sum(
-                tf.keras.losses.MSE(target_reward_batch, rewards_batch)
-            )
-            total_value_loss += value_loss
-            total_policy_loss += policy_loss
-            total_reward_loss += reward_loss
-            loss_step = 0.25 * value_loss + policy_loss + reward_loss
-            # scale gradient of loss
-            loss_step = scale_gradient(loss_step, 1 / config.num_unroll_steps)
-            loss += loss_step
+        # No reward loss at initial step
+        reward_loss = 0.0
 
-            # YOUR CODE HERE: Half the gradient of the representation
-            representations_batch = scale_gradient(representations_batch, 0.5)
+        # Scale value loss by 0.25
+        total_loss = 0.25 * value_loss + policy_loss
 
-        train_results.total_losses.append(loss)
-        train_results.value_losses.append(total_value_loss)
-        train_results.policy_losses.append(total_policy_loss)
-        train_results.reward_losses.append(total_reward_loss)
-        return loss
+        # Now unroll for num_unroll_steps
+        # hidden_rep is the representation R_t
+        # For each step, we input: [R_t, one_hot(action_t)]
+        # Then apply recurrent_model to get next hidden state, reward, value, policy
+        current_hidden = hidden_rep
 
-    optimizer.minimize(loss=loss, var_list=network.cb_get_variables())
+        for step_idx, (step_values) in enumerate(targets_recurrent_batch):
+            # step_values = list of tuples for each sample in batch: (value, reward, policy)
+            step_values, step_rewards, step_policies = zip(*step_values)
+
+            # Convert to tensors
+            step_values = tf.convert_to_tensor(step_values, dtype=tf.float32)
+            step_rewards = tf.convert_to_tensor(step_rewards, dtype=tf.float32)
+            step_policies = tf.convert_to_tensor(step_policies, dtype=tf.float32)
+
+            # Convert scalar values to support
+            step_values_support = network._scalar_to_support(step_values)
+
+            # Actions for this unroll step
+            step_actions = actions_batch[step_idx]
+            step_actions = tf.convert_to_tensor(step_actions, dtype=tf.int32)
+
+            # Create one-hot of actions
+            action_one_hot = tf.one_hot(step_actions, depth=config.action_space_size, dtype=tf.float32)
+            # Conditioned hidden state
+            conditioned_hidden = tf.concat([current_hidden, action_one_hot], axis=1)
+
+            # Recurrent inference
+            # recurrent_model(conditioned_hidden) returns: (hidden_representation, reward, value, policy_logits)
+            next_hidden, pred_reward, pred_value, pred_policy_logits = network.recurrent_model(conditioned_hidden)
+
+            # Compute losses at this step
+            # Value loss
+            step_value_loss = tf.nn.softmax_cross_entropy_with_logits(logits=pred_value, labels=step_values_support)
+            step_value_loss = tf.reduce_mean(step_value_loss)
+
+            # Reward loss (MSE)
+            # pred_reward shape: (batch, 1)
+            step_reward_loss = tf.reduce_mean((tf.squeeze(pred_reward, axis=1) - step_rewards) ** 2)
+
+            # Policy loss
+            step_policy_loss = tf.nn.softmax_cross_entropy_with_logits(logits=pred_policy_logits, labels=step_policies)
+            step_policy_loss = tf.reduce_mean(step_policy_loss)
+
+            # Combine step losses: scale value loss by 0.25
+            step_loss = 0.25 * step_value_loss + step_policy_loss + step_reward_loss
+
+            # Scale the gradient by 1/num_unroll_steps
+            step_loss = scale_gradient(step_loss, 1.0 / num_unroll_steps)
+
+            # Add to total loss
+            total_loss += step_loss
+
+            # Update total running losses for logging
+            value_loss += step_value_loss
+            reward_loss += step_reward_loss
+            policy_loss += step_policy_loss
+
+            # Half the gradient of the latent representation for next step
+            current_hidden = scale_gradient(next_hidden, 0.5)
+
+        # Log losses
+        # total_value_loss here includes initial + recurrent steps
+        total_value_loss = value_loss
+        total_policy_loss = policy_loss
+        total_reward_loss = reward_loss
+
+        train_results.total_losses.append(total_loss.numpy())
+        train_results.value_losses.append(total_value_loss.numpy())
+        train_results.policy_losses.append(total_policy_loss.numpy())
+        train_results.reward_losses.append(total_reward_loss.numpy())
+
+        # Minimize
+        variables = network.cb_get_variables()()
+        grads = tape.gradient(total_loss, variables)
+        optimizer.apply_gradients(zip(grads, variables))
+
     network.train_steps += 1
