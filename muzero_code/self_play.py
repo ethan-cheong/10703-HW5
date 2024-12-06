@@ -15,8 +15,8 @@ def self_play(env, config: MuZeroConfig, replay_buffer: ReplayBuffer, network: C
     # Create optimizer for training
     optimizer = Adam(learning_rate=config.lr_init)
     games_played = 0
-    test_rewards = TestResults()
-    train_results = TrainResults()
+    test_rewards = TestResults(config.num_simulations)
+    train_results = TrainResults(config.num_simulations)
     for i in range(config.num_epochs):  # Number of Steps of train/play alternations
         print(f"Epoch Number {i}")
         games_played, score = play_games(config, replay_buffer, network, env, games_played)
@@ -30,7 +30,7 @@ def self_play(env, config: MuZeroConfig, replay_buffer: ReplayBuffer, network: C
             break
 
     # Always create plots at the end
-    print("\nCreating training and testing plots...")
+    print(f"\nCreating training and testing plots for simulation {config.num_simulations}...")
     train_results.plot_individual_losses()
     train_results.plot_total_loss()
     test_rewards.plot_rewards()

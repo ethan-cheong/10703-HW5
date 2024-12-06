@@ -11,12 +11,13 @@ KnownBounds = collections.namedtuple("KnownBounds", ["min", "max"])
 
 
 class TrainResults(object):
-    def __init__(self):
+    def __init__(self, num_simulations):
         self.value_losses = []
         self.reward_losses = []
         self.policy_losses = []
         self.total_losses = []
-        self.plot_dir = 'outputs/plots/training'
+        self.plot_dir = f'outputs/plots/sim_{num_simulations}/training'
+        os.makedirs(self.plot_dir, exist_ok=True)
 
     def plot_total_loss(self):
         x_vals = np.arange(len(self.total_losses))
@@ -51,9 +52,10 @@ class TrainResults(object):
 
 
 class TestResults(object):
-    def __init__(self):
+    def __init__(self, num_simulations):
         self.test_rewards = []
-        self.plot_dir = 'outputs/plots/testing'
+        self.plot_dir = f'outputs/plots/sim_{num_simulations}/testing'
+        os.makedirs(self.plot_dir, exist_ok=True)
 
     def add_reward(self, reward):
         self.test_rewards.append(reward)
