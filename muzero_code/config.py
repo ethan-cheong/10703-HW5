@@ -3,6 +3,7 @@ from typing import Optional
 from mcts import visit_softmax_temperature
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 MAX_FLOAT_VAL = float("inf")
 
@@ -15,36 +16,44 @@ class TrainResults(object):
         self.reward_losses = []
         self.policy_losses = []
         self.total_losses = []
+        self.plot_dir = 'outputs/plots/training'
 
     def plot_total_loss(self):
         x_vals = np.arange(len(self.total_losses))
+        plt.figure()
         plt.plot(x_vals, self.total_losses, label="Train Loss")
         plt.xlabel("Train Steps")
         plt.ylabel("Loss")
-        plt.show()
+        plt.savefig(os.path.join(self.plot_dir, 'total_loss.png'))
+        plt.close()
 
     def plot_individual_losses(self):
         x_vals = np.arange(len(self.total_losses))
+        plt.figure()
         plt.plot(x_vals, self.value_losses, label="Value Loss")
         plt.plot(x_vals, self.policy_losses, label="Policy Loss")
         plt.plot(x_vals, self.reward_losses, label="Reward Loss")
         plt.xlabel("Train Steps")
         plt.ylabel("Losses")
         plt.legend()
-        plt.show()
+        plt.savefig(os.path.join(self.plot_dir, 'individual_losses.png'))
+        plt.close()
 
     def plot_policy_loss(self):
         x_vals = np.arange(len(self.total_losses))
+        plt.figure()
         plt.plot(x_vals, self.policy_losses, label="Policy Loss")
         plt.xlabel("Train Steps")
         plt.ylabel("Losses")
         plt.legend()
-        plt.show()
+        plt.savefig(os.path.join(self.plot_dir, 'policy_loss.png'))
+        plt.close()
 
 
 class TestResults(object):
     def __init__(self):
         self.test_rewards = []
+        self.plot_dir = 'outputs/plots/testing'
 
     def add_reward(self, reward):
         self.test_rewards.append(reward)
@@ -57,10 +66,12 @@ class TestResults(object):
 
     def plot_rewards(self):
         x_vals = np.arange(len(self.test_rewards))
+        plt.figure()
         plt.plot(x_vals, self.test_rewards, label="Test Reward")
         plt.xlabel("Test Episodes")
         plt.ylabel("Reward")
-        plt.show()
+        plt.savefig(os.path.join(self.plot_dir, 'test_rewards.png'))
+        plt.close()
 
 
 class MinMaxStats(object):

@@ -24,11 +24,30 @@ def set_seeds(seed=SEED):
     tf.random.set_seed(seed)
 
 
+def setup_output_directories():
+    """Create directories for storing plots and other outputs"""
+    dirs = [
+        'outputs',
+        'outputs/plots',
+        'outputs/plots/training',
+        'outputs/plots/testing'
+    ]
+    for dir_path in dirs:
+        os.makedirs(dir_path, exist_ok=True)
+    return dirs[0]  # return base output directory
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train MuZero.")
     parser.add_argument("--num_simulations", type=int, default=50)
+    parser.add_argument("--output_dir", type=str, default="outputs",
+                       help="Directory to save outputs")
     args = parser.parse_args()
     print("num simulations:", args.num_simulations)
+    
+    # Setup output directories
+    output_dir = setup_output_directories()
+    print(f"Outputs will be saved to: {output_dir}")
 
     # Set seeds for reproducibility
     set_seeds()
