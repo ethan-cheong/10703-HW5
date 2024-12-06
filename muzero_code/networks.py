@@ -329,9 +329,8 @@ def update_weights(config, network, optimizer, batch, train_results):
                 network.recurrent_model.call(conditioned_representation)
             )
 
-            # Same as above, convert scalar targets to categorical
-            target_value_batch = np.clip(target_value_batch, -1e308, 1e308)
-            target_value_batch = tf.convert_to_tensor(target_value_batch)
+            target_value_batch, target_reward_batch, target_policy_batch = zip(*targets_batch)
+            target_value_batch = tf.convert_to_tensor(np.clip(target_value_batch, -1e308, 1e308))
             target_value_batch = network._scalar_to_support(target_value_batch)
 
             target_policy_batch = tf.convert_to_tensor(target_policy_batch)
@@ -354,7 +353,7 @@ def update_weights(config, network, optimizer, batch, train_results):
             total_value_loss += value_loss
             total_policy_loss += policy_loss
             total_reward_loss += reward_loss
-            loss_step = 0.25 * total_value_loss + total_policy_loss + total_reward_loss
+            loss_step = 0.25 * value_loss + policy_loss + reward_loss
             # scale gradient of loss
             loss_step = scale_gradient(loss_step, 1 / config.num_unroll_steps)
             loss += loss_step
