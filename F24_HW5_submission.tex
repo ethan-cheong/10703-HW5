@@ -105,38 +105,38 @@ Enter your team members' names and Andrew IDs in the boxes below. If you worked 
 Name 1: \begin{tcolorbox}[fit,height=1cm, width=5cm, blank, borderline={1pt}{1pt},nobeforeafter]
     \begin{center}
     \vspace{3mm}
-    \large{}
+    \large{Ethan Cheong}
     \end{center}
 \end{tcolorbox}
 Andrew ID 1: \begin{tcolorbox}[fit,height=1cm, width=5cm, blank, borderline={1pt}{1pt},nobeforeafter]
     \begin{center}
     \vspace{3mm}
-    \large{}
+    \large{echeong}
     \end{center}
 \end{tcolorbox}
     \\
 Name 2: \begin{tcolorbox}[fit,height=1cm, width=5cm, blank, borderline={1pt}{1pt},nobeforeafter]
     \begin{center}
     \vspace{3mm}
-    \large{}
+    \large{Al Hassan}
     \end{center}
 \end{tcolorbox}
 Andrew ID 2: \begin{tcolorbox}[fit,height=1cm, width=5cm, blank, borderline={1pt}{1pt},nobeforeafter]
     \begin{center}
     \vspace{3mm}
-    %solution
+    \large{akhassan}
     \end{center}
 \end{tcolorbox} \\
 Name 3: \begin{tcolorbox}[fit,height=1cm, width=5cm, blank, borderline={1pt}{1pt},nobeforeafter]
     \begin{center}
     \vspace{3mm}
-    \large{}
+    \large{Clement Ou}
     \end{center}
 \end{tcolorbox}
 Andrew ID 3: \begin{tcolorbox}[fit,height=1cm, width=5cm, blank, borderline={1pt}{1pt},nobeforeafter]
     \begin{center}
     \vspace{3mm}
-    %solution
+    \large{clemento}
     \end{center}
 \end{tcolorbox} \\
 \vspace{0.5cm}
@@ -161,10 +161,19 @@ Andrew ID 3: \begin{tcolorbox}[fit,height=1cm, width=5cm, blank, borderline={1pt
 \subsection*{1.1.1: MCTS child selection (10 pt)}
 Insert code for MCTS child selection.
 
-\begin{tcolorbox}[fit,height=45em, width=40em, blank, borderline={1pt}{1pt},nobeforeafter]
-\begin{center}
-    %YOUR SOLUTION HERE%
-\end{center}
+\begin{tcolorbox}[height=20cm, width=\textwidth]
+    \begin{center}
+        \begin{verbatim}
+def select_child(config, node: Node, min_max_stats):
+    scores = []
+    for action, child in node.children.items():
+        score = ucb_score(config, node, child, min_max_stats)
+        scores.append((score, action, child))
+    # Select action-child pair with max score
+    _, action, child = max(scores, key=lambda x: x[0])
+    return action, child
+        \end{verbatim}
+    \end{center}
 \end{tcolorbox}
 \newpage
 
@@ -173,9 +182,39 @@ Insert code for MCTS child selection.
 \subsection*{1.1.2: MCTS expand root/child (20 pts)}
 Insert code for root and child expansion.
 
-\begin{tcolorbox}[fit,height=45em, width=40em, blank, borderline={1pt}{1pt},nobeforeafter]
+\begin{tcolorbox}[height=20cm, width=\textwidth]
 \begin{center}
-    %YOUR SOLUTION HERE%
+    \begin{verbatim}
+def expand_root(node, actions, network, current_state):
+    value, reward, policy_logits, hidden_representation =
+        network.initial_inference(np.expand_dims(current_state, axis=0))
+
+    node.hidden_representation = hidden_representation
+    node.reward = reward
+    node.expanded = True
+
+    policy = tf.nn.softmax(policy_logits).numpy()[0]
+
+    for a, p in zip(actions, policy):
+        node.children[a] = Node(prior=p)
+
+    return value
+
+def expand_node(node, actions, network, parent_state, parent_action):
+    value, reward, policy_logits, hidden_representation =
+        network.recurrent_inference(parent_state, parent_action)
+
+    node.hidden_representation = hidden_representation
+    node.reward = reward
+    node.expanded = True
+
+    policy = tf.nn.softmax(policy_logits).numpy()[0]
+
+    for a, p in zip(actions, policy):
+        node.children[a] = Node(prior=p)
+
+    return value
+        \end{verbatim}
 \end{center}
 \end{tcolorbox}
 \newpage
@@ -185,9 +224,15 @@ Insert code for root and child expansion.
 \subsection*{1.1.3: MCTS backpropagation (5 pts)}
 Insert code for MCTS backpropagation.
 
-\begin{tcolorbox}[fit,height=22em, width=40em, blank, borderline={1pt}{1pt},nobeforeafter]
+\begin{tcolorbox}[height=22em, width=\textwidth]
 \begin{center}
-    %YOUR SOLUTION HERE%
+    \begin{verbatim}
+def backpropagate(path, value, discount, min_max_stats):
+    for node in reversed(path):
+        node.value_sum += value
+        node.visit_count += 1
+        value = node.reward + discount * value
+    \end{verbatim}
 \end{center}
 \end{tcolorbox}
     
@@ -196,9 +241,22 @@ Insert code for MCTS backpropagation.
 \subsection*{1.1.4: MCTS softmax sampling (5 pts)}
 Insert code for MCTS softmax sampling.
 
-\begin{tcolorbox}[fit,height=22em, width=40em, blank, borderline={1pt}{1pt},nobeforeafter]
+\begin{tcolorbox}[height=22em, width=\textwidth]
 \begin{center}
-    %YOUR SOLUTION HERE%
+    \begin{verbatim}
+def softmax_sample(visit_counts, temperature):
+    # visit_counts = [(visit_count, action), ...]
+    counts = np.array([vc for vc, a in visit_counts])
+    if temperature == 0:
+        # Argmax selection
+        max_index = np.argmax(counts)
+        return visit_counts[max_index][1]
+    else:
+        # Compute distribution p(a) = N(a)^(1/T) / sum(N(b)^(1/T))
+        counts = counts ** (1.0 / temperature)
+        probs = counts / np.sum(counts)
+        return np.random.choice([a for _, a in visit_counts], p=probs)
+    \end{verbatim}
 \end{center}
 \end{tcolorbox}
 \newpage
@@ -208,15 +266,83 @@ Insert code for MCTS softmax sampling.
 \subsection*{1.1.5: Network weight updates (20 pts)}
 Insert code for network weight updates.
 
-\begin{tcolorbox}[fit,height=45em, width=40em, blank, borderline={1pt}{1pt},nobeforeafter]
+\begin{tcolorbox}[height=50em, width=\textwidth]
 \begin{center}
-    %YOUR SOLUTION HERE%
+    \begin{verbatim}
+def update_weights(config, network, optimizer, batch, train_results):
+    (state_batch, targets_init_batch,
+        targets_recurrent_batch, actions_batch) = batch
+    state_batch = tf.convert_to_tensor(state_batch, dtype=tf.float32)
+    init_values, init_rewards, init_policies = zip(*targets_init_batch)
+    init_values = tf.convert_to_tensor(init_values, dtype=tf.float32)
+    init_policies = tf.convert_to_tensor(init_policies, dtype=tf.float32)
+    init_values_support = network._scalar_to_support(init_values)
+    num_unroll_steps = len(targets_recurrent_batch)
+    with tf.GradientTape() as tape:
+        hidden_rep, pred_value, pred_policy_logits =
+            network.initial_model(state_batch)
+        value_loss = tf.nn.softmax_cross_entropy_with_logits(
+            logits=pred_value, labels=init_values_support)
+        value_loss = tf.reduce_mean(value_loss)
+        policy_loss = tf.nn.softmax_cross_entropy_with_logits(
+            logits=pred_policy_logits, labels=init_policies)
+        policy_loss = tf.reduce_mean(policy_loss)
+        reward_loss = 0.0
+        total_loss = 0.25 * value_loss + policy_loss
+        current_hidden = hidden_rep
+        for step_idx, (step_values) in enumerate(targets_recurrent_batch):
+            step_values, step_rewards, step_policies = zip(*step_values)
+            step_values = tf.convert_to_tensor(step_values,
+                dtype=tf.float32)
+            step_rewards = tf.convert_to_tensor(step_rewards,
+                dtype=tf.float32)
+            step_policies = tf.convert_to_tensor(step_policies,
+                dtype=tf.float32)
+            step_values_support = network._scalar_to_support(step_values)
+            step_actions = actions_batch[step_idx]
+            step_actions = tf.convert_to_tensor(step_actions,
+                dtype=tf.int32)
+            action_one_hot = tf.one_hot(step_actions,
+                depth=config.action_space_size, dtype=tf.float32)
+            conditioned_hidden = tf.concat([current_hidden,
+                action_one_hot], axis=1)
+            next_hidden, pred_reward, pred_value, pred_policy_logits =
+                network.recurrent_model(conditioned_hidden)
+    \end{verbatim}
 \end{center}
 \end{tcolorbox}
 
-\begin{tcolorbox}[fit,height=50em, width=40em, blank, borderline={1pt}{1pt},nobeforeafter]
+\begin{tcolorbox}[height=50em, width=\textwidth]
 \begin{center}
-    %YOUR SOLUTION HERE%
+    \begin{verbatim}
+            step_value_loss = tf.nn.softmax_cross_entropy_with_logits(
+                logits=pred_value, labels=step_values_support)
+            step_value_loss = tf.reduce_mean(step_value_loss)
+            step_reward_loss = tf.reduce_mean((tf.squeeze(pred_reward,
+                axis=1) - step_rewards) ** 2)
+            step_policy_loss = tf.nn.softmax_cross_entropy_with_logits(
+                logits=pred_policy_logits, labels=step_policies)
+            step_policy_loss = tf.reduce_mean(step_policy_loss)
+            step_loss = 0.25 * step_value_loss + step_policy_loss +
+                step_reward_loss
+            step_loss = scale_gradient(step_loss, 1.0 / num_unroll_steps)
+            total_loss += step_loss
+            value_loss += step_value_loss
+            reward_loss += step_reward_loss
+            policy_loss += step_policy_loss
+            current_hidden = scale_gradient(next_hidden, 0.5)
+        total_value_loss = value_loss
+        total_policy_loss = policy_loss
+        total_reward_loss = reward_loss
+        train_results.total_losses.append(total_loss.numpy())
+        train_results.value_losses.append(total_value_loss.numpy())
+        train_results.policy_losses.append(total_policy_loss.numpy())
+        train_results.reward_losses.append(total_reward_loss.numpy())
+        variables = network.cb_get_variables()()
+        grads = tape.gradient(total_loss, variables)
+        optimizer.apply_gradients(zip(grads, variables))
+    network.train_steps += 1
+    \end{verbatim}
 \end{center}
 \end{tcolorbox}
 \newpage
@@ -227,9 +353,23 @@ Insert code for network weight updates.
 \subsection*{1.2: Running MuZero (20 pts)}
 Run MuZero, provide the three plots, reason about policy loss behavior.
 
-\begin{tcolorbox}[fit,height=45em, width=40em, blank, borderline={1pt}{1pt},nobeforeafter]
+\begin{tcolorbox}[height=45em, width=\textwidth]
 \begin{center}
-    %YOUR SOLUTION HERE%
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{outputs/plots/sim_50/training/individual_losses.png}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{outputs/plots/sim_50/training/total_loss.png}
+    \end{minipage}
+    
+    \vspace{1em}
+    
+    \begin{minipage}{0.45\textwidth}
+        \includegraphics[width=\textwidth]{outputs/plots/sim_50/testing/test_rewards.png}
+    \end{minipage}
+
+    The policy loss initially decreases sharply in the first 100 training steps, suggesting the network quickly learns basic action preferences for the task. After the initial decline, we observe a steady increase in policy loss from around step 200 to 1200. This behavior can be attributed to more exploration as the value estimates become more reliable, the policy network adapting to complex situations as the agent learns to balance longer, and potential distribution shift as the agent encounters states it hasn't seen before. Despite rising policy loss, the test rewards plot shows consistent improving performance, reaching the maximum reward of 200 consistently by the end. This suggests that the increasing policy loss doesn't necessarily indicate worse performance, but rather reflects the complexity of the learned policy.
 \end{center}
 \end{tcolorbox}
 \newpage
@@ -239,10 +379,56 @@ Run MuZero, provide the three plots, reason about policy loss behavior.
 \subsection*{1.3: Effects of Hyperparameters (10 pts)}
 Run MuZero with different hyperparameters and provide three plots for each value (nine total). Describe and explain the effects of the parameter.
 
-\begin{tcolorbox}[fit,height=45em, width=40em, blank, borderline={1pt}{1pt},nobeforeafter]
-\begin{center}
-    %YOUR SOLUTION HERE%
-\end{center}
+\begin{tcolorbox}[height=45em, width=\textwidth]
+    \begin{center}
+        % Simulation 10 plots
+        \textbf{Simulation 10} \\
+        \begin{minipage}{0.32\textwidth}
+            \includegraphics[width=\textwidth]{outputs/plots/sim_10/training/individual_losses.png}
+        \end{minipage}%
+        \hfill%
+        \begin{minipage}{0.32\textwidth}
+            \includegraphics[width=\textwidth]{outputs/plots/sim_10/training/total_loss.png}
+        \end{minipage}%
+        \hfill%
+        \begin{minipage}{0.32\textwidth}
+            \includegraphics[width=\textwidth]{outputs/plots/sim_10/testing/test_rewards.png}
+        \end{minipage}
+        
+        \vspace{1em}
+        
+        % Simulation 50 plots
+        \textbf{Simulation 50} \\
+        \begin{minipage}{0.32\textwidth}
+            \includegraphics[width=\textwidth]{outputs/plots/sim_50/training/individual_losses.png}
+        \end{minipage}%
+        \hfill%
+        \begin{minipage}{0.32\textwidth}
+            \includegraphics[width=\textwidth]{outputs/plots/sim_50/training/total_loss.png}
+        \end{minipage}%
+        \hfill%
+        \begin{minipage}{0.32\textwidth}
+            \includegraphics[width=\textwidth]{outputs/plots/sim_50/testing/test_rewards.png}
+        \end{minipage}
+        
+        \vspace{1em}
+        
+        % Simulation 100 plots
+        \textbf{Simulation 100} \\
+        \begin{minipage}{0.32\textwidth}
+            \includegraphics[width=\textwidth]{outputs/plots/sim_100/training/individual_losses.png}
+        \end{minipage}%
+        \hfill%
+        \begin{minipage}{0.32\textwidth}
+            \includegraphics[width=\textwidth]{outputs/plots/sim_100/training/total_loss.png}
+        \end{minipage}%
+        \hfill%
+        \begin{minipage}{0.32\textwidth}
+            \includegraphics[width=\textwidth]{outputs/plots/sim_100/testing/test_rewards.png}
+        \end{minipage}    
+    \end{center}
+
+    The number of MCTS simulations impacted training stability, with less simulations showing more volatile training and higher loss values. More simulations led to better stability with smoother loss curves. The number of simulations also impacted performance, with 50 being a good balance between exploration and exploitation, and the only one that reached the maximum reward of 200 consistently. Lower simulations had high variance in test rewards, suggesting inconsistent policy, and high simulations had lower average rewards, possibly due to over-exploration or excessive computational budget leading to conservative behavior.
 \end{tcolorbox}
 \newpage
 
@@ -266,19 +452,20 @@ Respond to the three questions.
 
 \textbf{Feedback}: You can help the course staff improve the course for future semesters by providing feedback. What was the most confusing part of this homework, and what would have made it less confusing?
 \begin{solution}[height=4cm]
+    The gym environment should be updated to a more recent version, as well as packages. Two of my teammates had M1 Macs and were unable to run the code as is. 
 \end{solution}
 
 \noindent\textbf{Time Spent}: How many hours did you spend working on this assignment? Your answer will not affect your grade. Please average your answer over all the members of your team.
 \begin{table}[H]
     \centering
     \begin{tabular}{r|c}
-        Alone &  \hspace{3em} %ANSWER HERE%
+        Alone &  \hspace{3em} 6
         \\ \hline
-        With teammates & \hspace{3em} %ANSWER HERE%
+        With teammates & \hspace{3em} 2
         \\ \hline
-        With other classmates & \hspace{3em} %ANSWER HERE%
+        With other classmates & \hspace{3em} 0
         \\ \hline
-        At office hours & \hspace{3em} %ANSWER HERE%
+        At office hours & \hspace{3em} 0
         \\ \hline
     \end{tabular}
 \end{table}
