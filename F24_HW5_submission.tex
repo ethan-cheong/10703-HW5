@@ -437,9 +437,27 @@ Run MuZero with different hyperparameters and provide three plots for each value
 \subsection*{1.4: Conceptual Questions (10 pts)}
 Respond to the three questions.
 
-\begin{tcolorbox}[fit,height=45em, width=40em, blank, borderline={1pt}{1pt},nobeforeafter]
+\begin{tcolorbox}[height=45em, width=\textwidth]
 \begin{center}
-    %YOUR SOLUTION HERE%
+    \begin{enumerate}
+        \item AlphaZero requires a known environment model, while MuZero learns the model dynamics from experience. AlphaZero works with true game states, while MuZero learns a latent state representation. AlphaZero uses the true environment for MCTS rollouts, while MuZero uses learned dynamics in latent space.
+        
+        MuZero would be preferred for robotics tasks where the exact physics model is unknown or complex. MuZero can learn the dynamics directly from experience, while AlphaZero would require a precise physics simulator.
+    
+        \item Reanalyze improves sample efficiency by revisiting old game trajectories with the latest, improved network. It uses both old and new policy targets for training, weighted by their relative quality.
+        
+        To implement this in the given code, we could modify \texttt{ReplayBuffer} to store full game trajectories, add a reanalyze function that runs MCTS with current network on old states, update \texttt{make\_target} to combine old and new policy targets, and add a weighting parameter to balance old vs new targets in training.
+    
+        \item To enforce consistency between $s_{t+1}$ and $\hat{s}_{t+1}$, we could:
+        \begin{itemize}
+            \item Add a consistency loss term: $L_{consist} = \|s_{t+1} - \hat{s}_{t+1}\|^2$
+            \item Modify the training loop to compute both paths:
+                - $s_{t+1}$ from initial inference on $o_{t+1}$
+                - $\hat{s}_{t+1}$ from dynamics applied to $s_t$
+            \item Add $L_{consist}$ to the total loss with appropriate weighting
+            \item This would encourage the dynamics model to predict hidden states that match the representation network's output
+        \end{itemize}
+    \end{enumerate}    
 \end{center}
 \end{tcolorbox}
 
